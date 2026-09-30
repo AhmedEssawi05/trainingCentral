@@ -36,4 +36,23 @@ Each tells part of the story, but none of them gives the full picture on its own
 
 ## Status
 
-Early stage — project scaffolding not yet started. This README defines the goals the implementation will be built against.
+Initial scaffolding in place, following the structure in [design.md](design.md):
+
+- `src/connectors/types.ts` — shared `Connector` interface every source implements.
+- `src/connectors/strava/` — first connector (OAuth token refresh + activity fetch/normalize). Garmin and TrainingPeaks connectors aren't built yet.
+- `src/db/schema.sql` + `src/db/client.ts` — SQLite schema and client for the core tables (`activities`, `activity_sources`, `metrics_daily`, `training_load`, `planned_workouts`, `sync_state`).
+- `src/sync/runSync.ts` — sync entry point; currently runs the Strava connector only and writes straight to `activities` (no reconciliation layer yet — see below).
+
+Not built yet: Garmin/TrainingPeaks connectors, the reconciliation/dedup layer, the API layer, and the dashboard itself.
+
+**Deviation from design.md:** using Node's built-in `node:sqlite` (`DatabaseSync`) instead of `better-sqlite3` — functionally the same, but avoids a native build step (`node-gyp`/Xcode Command Line Tools) that this machine didn't have set up. Revisit if a feature `better-sqlite3` has and `node:sqlite` doesn't turns out to matter.
+
+### Setup
+
+```bash
+npm install
+cp .env.example .env   # fill in Strava API credentials
+npm run sync            # builds and runs a Strava sync into training-central.db
+```
+
+`npm run sync` requires a `STRAVA_REFRESH_TOKEN`, obtained via a one-time manual OAuth authorization (see [Strava's OAuth docs](https://developers.strava.com/docs/authentication/)) — token refresh after that is automatic.

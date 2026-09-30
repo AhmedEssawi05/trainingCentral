@@ -1,0 +1,19 @@
+{
+  "name": "training-central",
+  "version": "0.1.0",
+  "description": "Unified training dashboard aggregating Strava, Garmin, and TrainingPeaks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc && cp src/db/schema.sql dist/db/schema.sql",
+    "sync": "npm run build && node dist/sync/runSync.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "typescript": "^5.6.2"
+  }
+}
