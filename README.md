@@ -38,8 +38,9 @@ Each tells part of the story, but none of them gives the full picture on its own
 
 Initial scaffolding in place, following the structure in [design.md](design.md):
 
-- `src/connectors/types.ts` — shared `Connector` interface every source implements.
-- `src/connectors/strava/` — first connector (OAuth token refresh + activity fetch/normalize). Garmin and TrainingPeaks connectors aren't built yet.
+- `src/connectors/types.ts` — shared `Connector` interface every source implements (`authenticate`, `fetchActivities`, `fetchMetrics`, `normalizeActivity`).
+- `src/connectors/http.ts` — shared HTTP helper: retries on 429 (honoring `Retry-After`) and 5xx (exponential backoff).
+- `src/connectors/strava/` — **design component 1 (Connectors), complete for Strava**: OAuth token refresh (proactive, before expiry), paginated activity fetch (200/page), rate-limit handling, and normalization (prefers Strava's `sport_type` over deprecated `type`). Unit tests in `strava.test.ts`. Garmin and TrainingPeaks connectors aren't built yet.
 - `src/db/schema.sql` + `src/db/client.ts` — SQLite schema and client for the core tables (`activities`, `activity_sources`, `metrics_daily`, `training_load`, `planned_workouts`, `sync_state`).
 - `src/sync/runSync.ts` — sync entry point; currently runs the Strava connector only and writes straight to `activities` (no reconciliation layer yet — see below).
 
@@ -53,6 +54,13 @@ Not built yet: Garmin/TrainingPeaks connectors, the reconciliation/dedup layer, 
 npm install
 cp .env.example .env   # fill in Strava API credentials
 npm run sync            # builds and runs a Strava sync into training-central.db
+npm test                # builds and runs connector unit tests (no network needed)
 ```
 
 `npm run sync` requires a `STRAVA_REFRESH_TOKEN`, obtained via a one-time manual OAuth authorization (see [Strava's OAuth docs](https://developers.strava.com/docs/authentication/)) — token refresh after that is automatic.
+
+### Connector layer notes
+
+- Connectors never touch the DB and never dedupe; they return `NormalizedActivity[]` with the original payload in `raw` so normalization can be replayed later.
+- A first sync (no checkpoint) backfills full history by paging; later syncs pass `after=<last sync>`.
+- Known limitation: if Strava rotates the refresh token, the new one is kept in memory only. Persisting it (encrypted, per design.md "Auth & credentials") belongs with the sync service.
