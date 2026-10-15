@@ -42,9 +42,12 @@ Initial scaffolding in place, following the structure in [design.md](design.md):
 - `src/connectors/http.ts` — shared HTTP helper: retries on 429 (honoring `Retry-After`) and 5xx (exponential backoff).
 - `src/connectors/strava/` — **design component 1 (Connectors), complete for Strava**: OAuth token refresh (proactive, before expiry), paginated activity fetch (200/page), rate-limit handling, and normalization (prefers Strava's `sport_type` over deprecated `type`). Unit tests in `strava.test.ts`. Garmin and TrainingPeaks connectors aren't built yet.
 - `src/db/schema.sql` + `src/db/client.ts` — SQLite schema and client for the core tables (`activities`, `activity_sources`, `metrics_daily`, `training_load`, `planned_workouts`, `sync_state`).
-- `src/sync/runSync.ts` — sync entry point; currently runs the Strava connector only and writes straight to `activities` (no reconciliation layer yet — see below).
+- `src/reconcile/reconcile.ts` — **design component 3 (Reconciliation / Dedup)**: matches an incoming activity to an existing canonical one (start within ±5 min, same sport group, duration within 10%, never two records from the same source), links it via `activity_sources`, and rebuilds the canonical row using per-field source precedence (`FIELD_PRECEDENCE`; e.g. TSS prefers TrainingPeaks, the rest prefer Garmin > Strava). Re-syncing a known record updates it in place. Tests in `reconcile.test.ts`.
+- `src/sync/runSync.ts` — sync entry point; currently runs the Strava connector only, passing each activity through reconciliation.
 
-Not built yet: Garmin/TrainingPeaks connectors, the reconciliation/dedup layer, the API layer, and the dashboard itself.
+`activity_sources` gained a `normalized_payload` column so the canonical row can be re-merged from all sources; `openDb` migrates existing databases and backfills it for single-source rows.
+
+Not built yet: Garmin/TrainingPeaks connectors, the API layer, and the dashboard itself.
 
 **Deviation from design.md:** using Node's built-in `node:sqlite` (`DatabaseSync`) instead of `better-sqlite3` — functionally the same, but avoids a native build step (`node-gyp`/Xcode Command Line Tools) that this machine didn't have set up. Revisit if a feature `better-sqlite3` has and `node:sqlite` doesn't turns out to matter.
 

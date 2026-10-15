@@ -1,11 +1,12 @@
 // Sync entry point: runs one connector end-to-end and writes results to the DB.
-// Currently wires up Strava only; Garmin/TrainingPeaks connectors slot in the same way
-// once reconciliation (design.md "Reconciliation / Dedup Layer") exists to merge them.
+// Currently wires up Strava only; Garmin/TrainingPeaks connectors slot in the same way.
+// Activities go through the reconciliation layer so cross-source duplicates merge.
 
 import "dotenv/config";
 import { openDb } from "../db/client.js";
 import { StravaConnector } from "../connectors/strava/index.js";
-import type { NormalizedActivity, SyncCheckpoint } from "../connectors/types.js";
+import { reconcileActivity } from "../reconcile/reconcile.js";
+import type { SyncCheckpoint } from "../connectors/types.js";
 
 async function main() {
   const db = openDb();
@@ -24,7 +25,7 @@ async function main() {
   db.exec("BEGIN");
   try {
     for (const activity of activities) {
-      insertActivity(db, activity);
+      reconcileActivity(db, activity);
     }
     db.exec("COMMIT");
   } catch (err) {
@@ -56,35 +57,6 @@ function updateCheckpoint(db: ReturnType<typeof openDb>, source: string): void {
      VALUES (?, ?, 'ok')
      ON CONFLICT(source) DO UPDATE SET last_synced_at = excluded.last_synced_at, last_status = 'ok'`,
   ).run(source, new Date().toISOString());
-}
-
-// No reconciliation layer yet, so each source's activity is inserted as its own
-// canonical activity. This will need to change once a second connector exists
-// and the same workout can arrive from more than one source.
-function insertActivity(db: ReturnType<typeof openDb>, activity: NormalizedActivity): void {
-  const existing = db
-    .prepare("SELECT activity_id FROM activity_sources WHERE source = ? AND source_activity_id = ?")
-    .get(activity.source, activity.sourceActivityId);
-  if (existing) return;
-
-  const result = db
-    .prepare(
-      `INSERT INTO activities (type, start_time, duration_seconds, distance_meters, elevation_gain_meters, tss)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      activity.type,
-      activity.startTime,
-      activity.durationSeconds,
-      activity.distanceMeters ?? null,
-      activity.elevationGainMeters ?? null,
-      activity.tss ?? null,
-    );
-
-  db.prepare(
-    `INSERT INTO activity_sources (activity_id, source, source_activity_id, raw_payload)
-     VALUES (?, ?, ?, ?)`,
-  ).run(result.lastInsertRowid, activity.source, activity.sourceActivityId, JSON.stringify(activity.raw));
 }
 
 main().catch((err) => {

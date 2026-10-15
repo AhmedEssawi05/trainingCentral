@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS activity_sources (
   source TEXT NOT NULL CHECK (source IN ('strava', 'garmin', 'trainingpeaks')),
   source_activity_id TEXT NOT NULL,
   raw_payload TEXT NOT NULL,
+  -- This source's NormalizedActivity (minus `raw`), so reconciliation can re-merge
+  -- the canonical row from every linked source when field precedence applies.
+  normalized_payload TEXT,
   UNIQUE (source, source_activity_id)
 );
 
